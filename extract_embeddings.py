@@ -38,6 +38,7 @@ def main(dataset, embeddings, detector, embedding_model, confidence):
 	# protoPath = os.path.sep.join(detector, "deploy.prototxt")
 	# modelPath = os.path.sep.join(detector,
 	# 	"res10_300x300_ssd_iter_140000.caffemodel")
+
 	protoPath = detector + "/" + "deploy.prototxt"
 	modelPath = detector + "/" + "res10_300x300_ssd_iter_140000.caffemodel"
 
@@ -56,6 +57,7 @@ def main(dataset, embeddings, detector, embedding_model, confidence):
 	# corresponding people names
 	knownEmbeddings = []
 	knownNames = []
+	rejections = []
 
 	# initialize the total number of faces processed
 	total = 0
@@ -64,7 +66,7 @@ def main(dataset, embeddings, detector, embedding_model, confidence):
 	for (i, imagePath) in enumerate(imagePaths):
 		print(f"[INFO] processing image {i+1}/{len(imagePaths)}")
 
-		# due to naming structure the name of the person can be determined
+		# due to naming structure, the name of the person can be determined
 		name = imagePath.split(os.path.sep)[-2]
 
 		# load the image, resize it to have a width of 600 pixels (while
@@ -74,7 +76,7 @@ def main(dataset, embeddings, detector, embedding_model, confidence):
 		image = imutils.resize(image, width=600)
 		(h, w) = image.shape[:2]
 
-		# perform a Gaussian_Blur on the image for
+		# perform a Gaussian_Blur on the image for processing
 		image = cv2.GaussianBlur(image, (5,5), 0)
 
 		# construct a blob from the image
@@ -127,9 +129,14 @@ def main(dataset, embeddings, detector, embedding_model, confidence):
 				knownEmbeddings.append(vec.flatten())
 				total += 1
 
+		exitMsg = f"""
+Successfully detected and serialized {total}/{len(imagePaths)} encodings.
+"""
+
 	# dump the facial embeddings + names to disk
-	print("[INFO] serializing {} encodings...".format(total))
+	print(exitMsg)
 	data = {"embeddings": knownEmbeddings, "names": knownNames}
 	f = open(embeddings, "wb")
 	f.write(pickle.dumps(data))
 	f.close()
+	return exitMsg

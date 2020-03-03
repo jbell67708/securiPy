@@ -101,18 +101,21 @@ def main(image, detector, embedding_model, recognizer, label_encoder, confidence
 				highest_face = Recognition(name, proba, startX, endX, startY, endY, image_obj)
 
 	# show the output image and draw a box around the ROI with the highest prob
-	drawBox(highest_face)
-	cv2.imshow("Image", image_obj)
-	cv2.waitKey(0)
+	# drawBox(highest_face)
+	# cv2.imwrite("render.png", image_obj)
+	# # cv2.imwshow("Image", image_obj)
+	# # cv2.waitKey(0)
 
+	return highest_face
 
-def drawBox(face):
-	text = "{}: {:.2f}%".format(face.name, face.probability)
-	y = face.y_cord[0] - 10 if face.y_cord[0] - 10 > 10 else face.y_cord[0] + 10
-	cv2.rectangle(face.image, (face.x_cord[0], face.y_cord[0]), \
-	(face.x_cord[1], face.y_cord[1]), (0, 0, 255), 2)
-	cv2.putText(face.image, text, (face.x_cord[0], y),
-		cv2.FONT_HERSHEY_COMPLEX, 0.45, (0, 0, 255), 2)
+# move to gui ??
+# def drawBox(face):
+# 	text = "{}: {:.2f}%".format(face.name, face.probability)
+# 	y = face.y_cord[0] - 10 if face.y_cord[0] - 10 > 10 else face.y_cord[0] + 10
+# 	cv2.rectangle(face.image, (face.x_cord[0], face.y_cord[0]), \
+# 	(face.x_cord[1], face.y_cord[1]), (0, 0, 255), 2)
+# 	cv2.putText(face.image, text, (face.x_cord[0], y),
+# 		cv2.FONT_HERSHEY_COMPLEX, 0.45, (0, 0, 255), 2)
 
 class Recognition:
 	def __init__(self, name, probability, startX, endX, startY, endY, image):
