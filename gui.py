@@ -1,9 +1,14 @@
+# packages/libraries
 import tkinter as tk
 from tkinter import messagebox
 from tkinter import filedialog
 from PIL import Image, ImageTk
+from queue import Queue
 import cv2
 import os
+import pickle
+
+# scripts
 from extract_embeddings import main as extract
 from train_model import main as train
 from recognize import main as recognize
@@ -33,6 +38,10 @@ class MainApp(tk.Frame):
             "output_image" : (self.ROOT_DIR + "/render.png")
         }
 
+        self.video_stream = cv2.VideoCapture(0)
+        self.recognize_flag = False
+        self.authorize = False
+
     # variable access methods
     def set_rec(self, new_val):
         try:
@@ -47,6 +56,7 @@ class MainApp(tk.Frame):
         self.emb_conf = new_val
 
     def get_rec(self):
+        print(self.rec_conf)
         return self.rec_conf
 
     def get_emb(self):
@@ -75,6 +85,9 @@ class MainApp(tk.Frame):
     def get_photo(self):
         return self.photo_object
 
+    def set_flag(self):
+        self.recognize_flag = not self.recognize_flag
+
     # constructs the data preferences window
     def new_data_window(self):
         self.newWindow = tk.Toplevel(self.parent)
@@ -101,22 +114,35 @@ class MainApp(tk.Frame):
             tk.messagebox.showinfo(title="Train", \
             message="Model trained successfully.")
 
-    def recognize_face(self, canvas):
-        self.highest_face = recognize(self.get_main_path("image"), self.get_main_path("detector"), \
+    def recognize_face(self, frame):
+        highest_face = recognize(frame, self.get_main_path("detector"), \
         self.get_main_path("embedding_model"), self.get_main_path("recognizer"), \
         self.get_main_path("label_encoder"), self.get_rec())
-        self.draw_box(self.highest_face)
-        self.canvas_update(self.highest_face.image)
+        self.draw_box(highest_face)
+        self.canvas_update(highest_face.image)
 
-    # TODO: canvas_update
-    def canvas_update(self, image):
-        self.init_image = image
-        self.init_image = cv2.cvtColor(self.init_image, cv2.COLOR_BGR2RGBA)
-        self.init_image = cv2.resize(self.init_image, (600,900))
-        self.init_image = Image.fromarray(self.init_image)
-        self.frame_image = ImageTk.PhotoImage(image=self.init_image)
-        self.video_label.imgtk = self.frame_image
-        self.video_label.configure(image=self.frame_image)
+    def convert_img(self, cv_image):
+        cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGBA)
+        cv_image = cv2.resize(cv_image, (600,600))
+        temp_image = Image.fromarray(cv_image)
+        return_image = ImageTk.PhotoImage(image=temp_image)
+        return return_image
+
+    def canvas_update(self):
+        ret, frame = self.video_stream.read()
+        self.init_image = frame
+
+        if self.recognize_flag:
+            self.highest_face = recognize(frame, self.get_main_path("detector"), \
+            self.get_main_path("embedding_model"), self.get_main_path("recognizer"), \
+            self.get_main_path("label_encoder"), self.get_rec())
+            self.draw_box(self.highest_face)
+            self.init_image = self.highest_face.image
+
+        self.init_image = self.convert_img(self.init_image)
+        self.video_label.imgtk = self.init_image
+        self.video_label.configure(image=self.init_image)
+        self.video_label.after(1, self.canvas_update)
 
     def draw_box(self, face):
     	text = "{}: {:.2f}%".format(face.name, face.probability)
@@ -129,12 +155,11 @@ class MainApp(tk.Frame):
     # draw the ui
     def draw(self):
         # left-side frame for images/video
-        self.video_frame = tk.Frame(self.parent, width=600, height=900)
+        self.video_frame = tk.Frame(self.parent, width=600, height=600)
         self.video_frame.grid(row=0, column=0, rowspan=15)
         self.video_label = tk.Label(self.video_frame)
         self.video_label.grid(row=0, column=0)
-        temp_read = cv2.imread(self.get_main_path("image"))
-        self.canvas_update(temp_read)
+        self.canvas_update()
 
         # label text for variable section
         var_sec = tk.Label(self.parent, \
@@ -175,21 +200,21 @@ class MainApp(tk.Frame):
         command=lambda: self.set_emb(float(emb_conf_ent.get())))
         update_emb.grid(row=6, column=2, pady=5)
 
-        # label text for photo entry
-        photo_lbl = tk.Label(self.parent, \
-        text="Name of file to test against: ", width=30, anchor="w")
-        photo_lbl.grid(row=7, column=1)
+        # DEPRECATED (FOR STILL FRAMES): label text for photo entry
+        # photo_lbl = tk.Label(self.parent, \
+        # text="Name of file to test against: ", width=30, anchor="w")
+        # photo_lbl.grid(row=7, column=1)
 
         # entry text for photo to test against
-        photo_ent_value = tk.StringVar()
-        photo_ent_value.set(self.photo_path + ".png")
-        photo_ent = tk.Entry(self.parent, textvariable=photo_ent_value)
-        photo_ent.grid(row=7, column=2)
+        # photo_ent_value = tk.StringVar()
+        # photo_ent_value.set(self.photo_path + ".png")
+        # photo_ent = tk.Entry(self.parent, textvariable=photo_ent_value)
+        # photo_ent.grid(row=7, column=2)
 
         # update button for updating value of photo_path
-        update_photo = tk.Button(self.parent, text="Update", width=21, pady=10,  \
-        command=lambda: self.set_photo_path(photo_ent_value.get()))
-        update_photo.grid(row=8, column=2, pady=5)
+        # update_photo = tk.Button(self.parent, text="Update", width=21, pady=10,  \
+        # command=lambda: self.set_photo_path(photo_ent_value.get()))
+        # update_photo.grid(row=8, column=2, pady=5)
 
         # label text for options section
         opt_sec = tk.Label(self.parent, \
@@ -207,8 +232,8 @@ class MainApp(tk.Frame):
         train_btn.grid(row=10, column=2, padx=5, pady=5, sticky="w")
 
         # recognize button
-        recog_btn = tk.Button(self.parent, text="Recognize", bg="red", fg="black", \
-        width=42, pady=10, command=lambda: self.recognize_face(self.get_main_path("image")))
+        recog_btn = tk.Button(self.parent, text="Recognize", activebackground="red", \
+        width=42, pady=10, command=lambda: self.set_flag())
         recog_btn.grid(row=11, column=1, pady=5, columnspan=2)
 
         # button to launch menu for data preferences
@@ -223,6 +248,7 @@ class MainApp(tk.Frame):
         self.main_paths["embeddings"] = self.child.main_path_text.get()
         self.main_paths["detector"] = self.child.det_path_text.get()
         self.main_paths["embedding_model"] = self.child.mod_path_text.get()
+
 
 class DataWindow(MainApp):
     def __init__(self, parent, outside, *args, **kwargs):

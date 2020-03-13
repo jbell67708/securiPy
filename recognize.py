@@ -44,7 +44,7 @@ def main(image, detector, embedding_model, recognizer, label_encoder, confidence
 
 	# load the image, resize it to have a width of 600 pixels (while
 	# maintaining the aspect ratio), and then grab the image dimensions
-	image_obj = cv2.imread(image)
+	image_obj = image
 	image_obj = imutils.resize(image_obj, width=600)
 	(h, w) = image_obj.shape[:2]
 
