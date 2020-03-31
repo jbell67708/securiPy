@@ -7,12 +7,14 @@ from queue import Queue
 import cv2
 import os
 import pickle
+import time
 
 # scripts
 from extract_embeddings import main as extract
 from train_model import main as train
 from recognize import main as recognize
 from recognize import Recognition
+from capture import main as capture
 
 class MainApp(tk.Frame):
     def __init__(self, parent, *args, **kwargs):
@@ -24,6 +26,10 @@ class MainApp(tk.Frame):
         self.rec_conf = 0.5
         # confidence threshold for detection
         self.emb_conf = 0.5
+        # authorization threshold
+        self.auth_thresh = 0.5
+        # number of recognitions taken into account for authorization
+        self.TEST_LENGTH = 30
         # name of photo
         self.photo_path = "jacob02"
         # links to necessary paths for dependent scripts
@@ -37,10 +43,14 @@ class MainApp(tk.Frame):
             "image" : (self.ROOT_DIR + "/Images/" + self.photo_path + ".png"),
             "output_image" : (self.ROOT_DIR + "/render.png")
         }
-
+        # webcam video stream
         self.video_stream = cv2.VideoCapture(0)
+        # flag to begin recognition
         self.recognize_flag = False
+        # authorization boolean variable for granting access
         self.authorize = False
+        # names of all people authorized
+        self.authorized_names = ["jacob"]
 
     # variable access methods
     def set_rec(self, new_val):
@@ -68,6 +78,12 @@ class MainApp(tk.Frame):
     def get_main_path(self, key):
         return self.main_paths[key]
 
+    def set_auth(self, new_val):
+        self.auth_thresh = new_val
+
+    def get_auth(self):
+        return self.auth_thresh
+
     def update_photo(self):
         self.photo_object = Image.open(self.ROOT_DIR + "Images/" + \
         self.photo_path + ".png")
@@ -90,8 +106,8 @@ class MainApp(tk.Frame):
 
     # constructs the data preferences window
     def new_data_window(self):
-        self.newWindow = tk.Toplevel(self.parent)
-        self.data_win = DataWindow(self.newWindow, self)
+        self.new_window = tk.Toplevel(self.parent)
+        self.data_win = DataWindow(self.new_window, self)
 
     # runs re-serialization process
     def serialize_embeddings(self):
@@ -131,12 +147,18 @@ class MainApp(tk.Frame):
     def canvas_update(self):
         ret, frame = self.video_stream.read()
         self.init_image = frame
+        color = (0, 0, 0)
 
         if self.recognize_flag:
             self.highest_face = recognize(frame, self.get_main_path("detector"), \
             self.get_main_path("embedding_model"), self.get_main_path("recognizer"), \
             self.get_main_path("label_encoder"), self.get_rec())
-            self.draw_box(self.highest_face)
+            if self.highest_face.probability >= (self.get_auth() * 100) \
+            and self.highest_face.name in self.authorized_names:
+                color = (0, 255, 0)
+            else:
+                color = (0, 0, 255)
+            self.draw_box(self.highest_face, color)
             self.init_image = self.highest_face.image
 
         self.init_image = self.convert_img(self.init_image)
@@ -144,13 +166,13 @@ class MainApp(tk.Frame):
         self.video_label.configure(image=self.init_image)
         self.video_label.after(1, self.canvas_update)
 
-    def draw_box(self, face):
+    def draw_box(self, face, color):
     	text = "{}: {:.2f}%".format(face.name, face.probability)
     	y = face.y_cord[0] - 10 if face.y_cord[0] - 10 > 10 else face.y_cord[0] + 10
     	cv2.rectangle(face.image, (face.x_cord[0], face.y_cord[0]), \
-    	(face.x_cord[1], face.y_cord[1]), (0, 0, 255), 2)
+    	(face.x_cord[1], face.y_cord[1]), color, 2)
     	cv2.putText(face.image, text, (face.x_cord[0], y),
-    		cv2.FONT_HERSHEY_COMPLEX, 0.45, (0, 0, 255), 2)
+    		cv2.FONT_HERSHEY_COMPLEX, 0.45, color, 2)
 
     # draw the ui
     def draw(self):
@@ -200,6 +222,23 @@ class MainApp(tk.Frame):
         command=lambda: self.set_emb(float(emb_conf_ent.get())))
         update_emb.grid(row=6, column=2, pady=5)
 
+        # label text for auth_thresh
+        auth_conf_lbl = tk.Label(self.parent, \
+        text="Authorization threshold (0.0-1.0): ", width=30, anchor="w")
+        auth_conf_lbl.grid(row=7, column=1, rowspan=2)
+
+        # entry box for setting value of auth_thresh
+        auth_ent_value = tk.StringVar()
+        auth_ent_value.set(self.auth_thresh)
+        auth_conf_ent = tk.Entry(self.parent, textvariable=auth_ent_value)
+        auth_conf_ent.grid(row=7, column=2, rowspan=2)
+
+        # update button for updating value of auth_thresh
+        update_auth = tk.Button(self.parent, text="Update", width=21, pady=10,  \
+        command=lambda: self.set_auth(float(auth_conf_ent.get())))
+        update_auth.grid(row=9, column=2, pady=5)
+
+
         # DEPRECATED (FOR STILL FRAMES): label text for photo entry
         # photo_lbl = tk.Label(self.parent, \
         # text="Name of file to test against: ", width=30, anchor="w")
@@ -219,27 +258,27 @@ class MainApp(tk.Frame):
         # label text for options section
         opt_sec = tk.Label(self.parent, \
         text="Options", underline=1, width=52, bg="blue", fg="white")
-        opt_sec.grid(row=9, column=1, columnspan=2, sticky="sw")
+        opt_sec.grid(row=10, column=1, columnspan=2, sticky="sw")
 
         # reserialization button
         reser_btn = tk.Button(self.parent, text="Re-serialize embeddings...", \
         width=21, pady=10, command=lambda: self.serialize_embeddings())
-        reser_btn.grid(row=10, column=1, padx=5, pady=5, sticky="w")
+        reser_btn.grid(row=11, column=1, padx=5, pady=5, sticky="w")
 
         # re-training button
         train_btn = tk.Button(self.parent, text="Re-train model...", \
         width=21, pady=10, command=lambda: self.retrain_model())
-        train_btn.grid(row=10, column=2, padx=5, pady=5, sticky="w")
+        train_btn.grid(row=11, column=2, padx=5, pady=5, sticky="w")
 
         # recognize button
         recog_btn = tk.Button(self.parent, text="Recognize", activebackground="red", \
         width=42, pady=10, command=lambda: self.set_flag())
-        recog_btn.grid(row=11, column=1, pady=5, columnspan=2)
+        recog_btn.grid(row=12, column=1, pady=5, columnspan=2)
 
         # button to launch menu for data preferences
         data_btn = tk.Button(self.parent, text="Preferences...", width=42, \
         pady=10, command=self.new_data_window)
-        data_btn.grid(row=12, column=1, pady=5, columnspan=2)
+        data_btn.grid(row=13, column=1, pady=5, columnspan=2)
 
     # used by DataWindow to access root main_paths
     def update_embed_paths(self, child):
