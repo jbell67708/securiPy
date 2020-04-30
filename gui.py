@@ -21,6 +21,8 @@ class MainApp(tk.Frame):
         tk.Frame.__init__(self, parent, *args, **kwargs)
         # directory of gui.py
         self.ROOT_DIR = os.path.dirname(os.path.realpath(__file__)) + "/"
+        # number of captures for recognize() method
+        self.RECOGNITION_LENGTH = 20
         self.parent = parent
         # confidence threshold for recognition
         self.rec_conf = 0.5
@@ -51,6 +53,8 @@ class MainApp(tk.Frame):
         self.authorize = False
         # names of all people authorized
         self.authorized_names = ["jacob"]
+        # array of all frames 
+        self.frame_array = []
 
     # variable access methods
     def set_rec(self, new_val):
@@ -144,27 +148,58 @@ class MainApp(tk.Frame):
         return_image = ImageTk.PhotoImage(image=temp_image)
         return return_image
 
+    def authorize_access(self, name):
+        self.authorize = True
+        tk.messagebox.showinfo(title="Authorization", \
+        message="Authorization successful for " + name + ".")
+
     def canvas_update(self):
         ret, frame = self.video_stream.read()
         self.init_image = frame
-        color = (0, 0, 0)
+        color = (0, 0, 255)
+        resume = True
 
         if self.recognize_flag:
             self.highest_face = recognize(frame, self.get_main_path("detector"), \
             self.get_main_path("embedding_model"), self.get_main_path("recognizer"), \
             self.get_main_path("label_encoder"), self.get_rec())
-            if self.highest_face.probability >= (self.get_auth() * 100) \
-            and self.highest_face.name in self.authorized_names:
-                color = (0, 255, 0)
-            else:
-                color = (0, 0, 255)
+            self.frame_array.append(self.highest_face)
+
+            if len(self.frame_array) > self.RECOGNITION_LENGTH:
+                sum = 0
+                set = {}
+                for frame in self.frame_array:
+                    sum += frame.probability
+                    if self.highest_face.name in set:
+                        set[self.highest_face.name] = set[self.highest_face.name] + 1
+                    else:
+                        set[self.highest_face.name] = 1
+
+                avg = (sum / len(self.frame_array)) / 100
+
+                for key in set:
+                    if set[key] > (self.RECOGNITION_LENGTH / 2):
+                        # checking for authorization threshold for red/green box
+                        if avg >= (self.get_auth()) \
+                        and self.highest_face.name in self.authorized_names:
+
+                            color = (0, 255, 0)
+                            self.authorize_access(self.highest_face.name)
+                            # call to authorized function (permission granted)
+                            # function will terminate canvas_update
+                            resume = False
+
+
             self.draw_box(self.highest_face, color)
             self.init_image = self.highest_face.image
 
-        self.init_image = self.convert_img(self.init_image)
-        self.video_label.imgtk = self.init_image
-        self.video_label.configure(image=self.init_image)
-        self.video_label.after(1, self.canvas_update)
+        if(resume):
+            self.init_image = self.convert_img(self.init_image)
+            self.video_label.imgtk = self.init_image
+            self.video_label.configure(image=self.init_image)
+            self.video_label.after(1, self.canvas_update)
+        else:
+            exit()
 
     def draw_box(self, face, color):
     	text = "{}: {:.2f}%".format(face.name, face.probability)
