@@ -1,0 +1,4 @@
+dataset/**
+images/**
+*.DS_STORE
+**__pycache__
